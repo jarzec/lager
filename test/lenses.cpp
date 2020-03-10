@@ -362,3 +362,20 @@ TEST_CASE("lenses, optbind")
         CHECK(view(first_first, set(first_first, v1, 256)) == 256);
     }
 }
+
+struct text { std::string data; };
+struct image { std::string path; };
+using leaf = std::variant<text, image>;
+
+TEST_CASE("lenses, var_visit")
+{
+    leaf l1{text{"foo"}};
+    leaf l2{text{"bar"}};
+
+    std::optional<leaf> l3{text{"foo"}};
+
+    auto str_lens = var_visit(attr(&text::data), attr(&image::path));
+    CHECK(view(str_lens, l1) == "foo");
+    CHECK(view(str_lens, l2) == "bar");
+    CHECK(view(optmap(str_lens), l3) == "bar");
+}

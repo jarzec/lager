@@ -291,6 +291,153 @@ auto optlift(Lens&& lens) {
     });
 }
 
+/*!
+ * `Lens<box<T>, T>`
+ */
+auto unbox = zug::comp([](auto&& f) {
+    return [f](auto&& p) {
+        return f(LAGER_FWD(p).get())([&](auto&& x) {
+            return std::decay_t<decltype(p)>{LAGER_FWD(x)};
+        });
+    };
+});
+
+/*!
+ * `Lens<T, [T]>`
+ */
+auto force_opt = zug::comp([](auto&& f) {
+    return [f = LAGER_FWD(f)](auto&& p) {
+        using opt_t = std::optional<std::decay_t<decltype(p)>>;
+        return f(opt_t{LAGER_FWD(p)})([&](auto&& x) {
+            return LAGER_FWD(x).value_or(LAGER_FWD(p));
+        });
+    };
+});
+
+namespace detail {
+// MSVC sucks, more at nine
+template <typename T>
+struct var_at_t : zug::detail::pipeable {
+    using Part = std::optional<T>;
+    template <typename F>
+    auto operator()(F&& f) const {
+        return [f = std::forward<F>(f)](auto&& p) {
+            using Whole = std::decay_t<decltype(p)>;
+            return f([&]() -> Part {
+                if (std::holds_alternative<T>(p)) {
+                    return std::get<T>(LAGER_FWD(p));
+                } else {
+                    return std::nullopt;
+                }
+            }())([&](Part x) -> Whole {
+                if (x.has_value() && std::holds_alternative<T>(p)) {
+                    return std::move(x).value();
+                } else {
+                    return LAGER_FWD(p);
+                }
+            });
+        };
+    }
+};
+
+} // namespace detail
+
+/*!
+ *  `Lens<(T | ...), [T]>
+ */
+template <typename T>
+auto var_at = detail::var_at_t<T>{};
+
+namespace detail {
+//template <typename T>
+//struct var_size : std::integral_constant<size_t, 0> {};
+//template <typename... Ts>
+//struct var_size<std::variant<Ts...>> : std::integral_constant<size_t, sizeof...(Ts)> {};
+//template <typename T>
+//using var_sequence = std::make_index_sequence<var_size<T>::value>;
+
+//template <typename T, typename LensT>
+//auto visit_lens()
+
+//template <typename... Ts>
+//struct lens_visitor {
+//    template <typename... LensTs>
+//    struct with {
+
+//    }
+//};
+
+
+
+template <typename Functor, typename... Ts, typename... LensTs>
+auto visit_lens(
+    Functor&& f, std::variant<Ts...> const& whole, LensTs&&... lenses) {
+    return std::visit(
+        ::lager::visitor{
+            [&](Ts const& ts) {
+                return std::forward<Functor>(f)(::lager::view(
+                    std::forward<LensTs>(lenses), ts))([&](auto&& part) {
+                    return ::lager::set(
+                        std::forward<LensTs>(lenses), ts, LAGER_FWD(part));
+                });
+            }...,
+            [&](Ts&& ts) {
+                return std::forward<Functor>(f)(
+                    ::lager::view(std::forward<LensTs>(lenses), std::move(ts)))(
+                    [&](auto&& part) {
+                        return ::lager::set(
+                            std::forward<LensTs>(lenses),
+                            std::move(ts),
+                            LAGER_FWD(part));
+                    });
+            }...},
+        whole);
+}
+
+template <typename Functor, typename... Ts, typename... LensTs>
+auto visit_lens(Functor&& f, std::variant<Ts...>&& whole, LensTs&&... lenses) {
+    return std::visit(
+        ::lager::visitor{
+            [&](Ts const& ts) {
+                return std::forward<Functor>(f)(::lager::view(
+                    std::forward<LensTs>(lenses), ts))([&](auto&& part) {
+                    return ::lager::set(
+                        std::forward<LensTs>(lenses), ts, LAGER_FWD(part));
+                });
+            }...,
+            [&](Ts&& ts) {
+                return std::forward<Functor>(f)(
+                    ::lager::view(std::forward<LensTs>(lenses), std::move(ts)))(
+                    [&](auto&& part) {
+                        return ::lager::set(
+                            std::forward<LensTs>(lenses),
+                            std::move(ts),
+                            LAGER_FWD(part));
+                    });
+            }...},
+        std::move(whole));
+}
+
+} // namespace detail
+
+/*!
+ * var_visit :: (Lens<W0, P>, ..., Lens<Wn, P>) -> Lens<(W0 | ... | Wn), P>
+ */
+template <typename... LensTs>
+auto var_visit(LensTs&&... lenses) {
+    return zug::comp(
+        [lens_tuple = std::make_tuple(LAGER_FWD(lenses)...)](auto&& f) {
+            return [&, f = LAGER_FWD(f)](auto&& whole) {
+                return std::apply(
+                    [&](auto&&... lenses) {
+                        return detail::visit_lens(
+                            f, LAGER_FWD(whole), LAGER_FWD(lenses)...);
+                    },
+                    lens_tuple);
+            };
+        });
+}
+
 
 } // namespace lens
 
