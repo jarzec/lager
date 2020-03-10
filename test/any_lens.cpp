@@ -31,25 +31,6 @@ struct tree
     immer::vector<immer::box<tree>> children {};
 };
 
-auto unbox = zug::comp([](auto&& f) {
-    return [f](auto&& p) {
-        return f(std::forward<decltype(p)>(p).get())([&](auto&& x) {
-            return decltype(p){std::forward<decltype(x)>(x)};
-        });
-    };
-});
-
-auto force_opt = zug::comp([](auto&& f) {
-    return [f = LAGER_FWD(f)](auto&& p) {
-        using opt_t = std::optional<std::decay_t<decltype(p)>>;
-        return f(opt_t{LAGER_FWD(p)})([&](auto&& x) {
-            return std::forward<decltype(x)>(x)
-                .value_or(LAGER_FWD(p));
-        });
-    };
-});
-
-
 using namespace lager;
 using namespace lager::lens;
 using namespace zug;

@@ -215,7 +215,7 @@ template <
     typename Whole,
     typename Lens,
     typename Functor>
-decltype(auto) opt_impl(Whole&& whole, Lens&& lens, Functor&& f) {
+auto opt_impl(Whole&& whole, Lens&& lens, Functor&& f) {
     using Part = typename PartMeta<std::decay_t<decltype(::lager::view(
         std::forward<Lens>(lens),
         std::declval<std::decay_t<decltype(whole.value())>>()))>>::type;
@@ -349,73 +349,28 @@ template <typename T>
 auto var_at = detail::var_at_t<T>{};
 
 namespace detail {
-//template <typename T>
-//struct var_size : std::integral_constant<size_t, 0> {};
-//template <typename... Ts>
-//struct var_size<std::variant<Ts...>> : std::integral_constant<size_t, sizeof...(Ts)> {};
-//template <typename T>
-//using var_sequence = std::make_index_sequence<var_size<T>::value>;
 
-//template <typename T, typename LensT>
-//auto visit_lens()
-
-//template <typename... Ts>
-//struct lens_visitor {
-//    template <typename... LensTs>
-//    struct with {
-
-//    }
-//};
-
-
+template <typename Whole, typename T, typename Lens, typename Functor>
+struct lens_visitor {
+    Lens lens; // not decayed
+    Functor functor; // not decayed
+    auto operator()(T t) {
+        return std::forward<Functor>(functor)(::lager::view(
+            std::forward<Lens>(lens), t))([&](auto&& part) {
+            return Whole{::lager::set(
+                std::forward<Lens>(lens), t, LAGER_FWD(part))};
+        });
+    }
+};
 
 template <typename Functor, typename... Ts, typename... LensTs>
-auto visit_lens(
-    Functor&& f, std::variant<Ts...> const& whole, LensTs&&... lenses) {
+auto visit_lenses(
+    Functor&& f, std::variant<Ts...> whole, LensTs&&... lenses) {
     return std::visit(
-        ::lager::visitor{
-            [&](Ts const& ts) {
-                return std::forward<Functor>(f)(::lager::view(
-                    std::forward<LensTs>(lenses), ts))([&](auto&& part) {
-                    return ::lager::set(
-                        std::forward<LensTs>(lenses), ts, LAGER_FWD(part));
-                });
-            }...,
-            [&](Ts&& ts) {
-                return std::forward<Functor>(f)(
-                    ::lager::view(std::forward<LensTs>(lenses), std::move(ts)))(
-                    [&](auto&& part) {
-                        return ::lager::set(
-                            std::forward<LensTs>(lenses),
-                            std::move(ts),
-                            LAGER_FWD(part));
-                    });
-            }...},
+        ::lager::visitor{lens_visitor<decltype(whole), Ts, LensTs, Functor>{
+                std::forward<LensTs>(lenses),
+                std::forward<Functor>(f)}...},
         whole);
-}
-
-template <typename Functor, typename... Ts, typename... LensTs>
-auto visit_lens(Functor&& f, std::variant<Ts...>&& whole, LensTs&&... lenses) {
-    return std::visit(
-        ::lager::visitor{
-            [&](Ts const& ts) {
-                return std::forward<Functor>(f)(::lager::view(
-                    std::forward<LensTs>(lenses), ts))([&](auto&& part) {
-                    return ::lager::set(
-                        std::forward<LensTs>(lenses), ts, LAGER_FWD(part));
-                });
-            }...,
-            [&](Ts&& ts) {
-                return std::forward<Functor>(f)(
-                    ::lager::view(std::forward<LensTs>(lenses), std::move(ts)))(
-                    [&](auto&& part) {
-                        return ::lager::set(
-                            std::forward<LensTs>(lenses),
-                            std::move(ts),
-                            LAGER_FWD(part));
-                    });
-            }...},
-        std::move(whole));
 }
 
 } // namespace detail
@@ -430,7 +385,7 @@ auto var_visit(LensTs&&... lenses) {
             return [&, f = LAGER_FWD(f)](auto&& whole) {
                 return std::apply(
                     [&](auto&&... lenses) {
-                        return detail::visit_lens(
+                        return detail::visit_lenses(
                             f, LAGER_FWD(whole), LAGER_FWD(lenses)...);
                     },
                     lens_tuple);
