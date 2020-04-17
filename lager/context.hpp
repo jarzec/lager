@@ -121,22 +121,22 @@ template <typename... Actions>
 struct dispatcher;
 
 template <typename... Actions>
-struct dispatcher<actions<Actions...>> : std::function<void(Actions)>...
+using overloadset = lager::visitor<std::function<void(Actions)>...>;
+
+template <typename... Actions>
+struct dispatcher<actions<Actions...>> : overloadset<Actions...>
 {
-    using std::function<void(Actions)>::operator()...;
-
+    using overloadset<Actions...>::operator()...;
     dispatcher() = default;
-
     template <typename... As>
     dispatcher(dispatcher<actions<As...>> other)
-        : std::function<void(Actions)>{static_cast<
+        : overloadset<Actions...>{ static_cast<
               std::function<void(find_convertible_action_t<Actions, As...>)>&>(
-              other)}...
+              other)... }
     {}
-
     template <typename Fn>
     dispatcher(Fn other)
-        : std::function<void(Actions)>{other}...
+        : overloadset<Actions...>{ other }
     {}
 
     template <typename Action, typename... As, typename Converter>

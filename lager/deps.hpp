@@ -30,6 +30,13 @@
 
 namespace lager {
 
+#if (_MSC_VER) && (_MSC_VER < 1924)
+    template <typename... Deps>
+    class deps
+    {
+    };
+#else
+
 struct missing_dependency_error : std::runtime_error
 {
     using std::runtime_error::runtime_error;
@@ -489,5 +496,7 @@ bool has(const deps<Ts...>& d)
 }
 
 //! @}
+
+#endif
 
 } // namespace lager
