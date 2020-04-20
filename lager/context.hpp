@@ -126,7 +126,8 @@ using overloadset = lager::visitor<std::function<void(Actions)>...>;
 template <typename... Actions>
 struct dispatcher<actions<Actions...>> : overloadset<Actions...>
 {
-    using overloadset<Actions...>::operator()...;
+    using overloadset<Actions...>::operator();
+
     dispatcher() = default;
     template <typename... As>
     dispatcher(dispatcher<actions<As...>> other)
@@ -151,13 +152,13 @@ struct dispatcher<actions<Actions...>> : overloadset<Actions...>
 
     template <typename... As, typename Converter>
     dispatcher(dispatcher<actions<As...>> other, Converter conv)
-        : std::function<void(Actions)>{
+        : overloadset<Actions>{
               dispatcher_fn_aux<Actions>(other, conv)}...
     {}
 
     template <typename Fn, typename Converter>
     dispatcher(Fn other, Converter conv)
-        : std::function<void(Actions)>{
+        : overloadset<Actions>{
               [other, conv](auto&& act) { other(conv(LAGER_FWD(act))); }}...
     {}
 };
