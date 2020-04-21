@@ -120,8 +120,14 @@ using merge_actions_t = typename decltype(merge_actions_aux(
 template <typename... Actions>
 struct dispatcher;
 
+template<typename T>
+void ignore_template_arg() {}
+
 template <typename... Actions>
 using overloadset = lager::visitor<std::function<void(Actions)>...>;
+
+template <typename... Actions>
+struct dispatcher;
 
 template <typename... Actions>
 struct dispatcher<actions<Actions...>> : overloadset<Actions...>
@@ -135,9 +141,11 @@ struct dispatcher<actions<Actions...>> : overloadset<Actions...>
               std::function<void(find_convertible_action_t<Actions, As...>)>&>(
               other)... }
     {}
+
     template <typename Fn>
     dispatcher(Fn other)
-        : overloadset<Actions...>{ other }
+        : overloadset<Actions...>{
+              ((void)ignore_template_arg<Actions>, other)...}
     {}
 
     template <typename Action, typename... As, typename Converter>
@@ -152,14 +160,15 @@ struct dispatcher<actions<Actions...>> : overloadset<Actions...>
 
     template <typename... As, typename Converter>
     dispatcher(dispatcher<actions<As...>> other, Converter conv)
-        : overloadset<Actions>{
-              dispatcher_fn_aux<Actions>(other, conv)}...
+        : overloadset<Actions...>{
+              dispatcher_fn_aux<Actions>(other, conv)...}
     {}
 
     template <typename Fn, typename Converter>
     dispatcher(Fn other, Converter conv)
-        : overloadset<Actions>{
-              [other, conv](auto&& act) { other(conv(LAGER_FWD(act))); }}...
+        : overloadset<Actions...>{(
+              (void) ignore_template_arg<Actions>,
+              [other, conv](auto&& act) { other(conv(LAGER_FWD(act))); })...} 
     {}
 };
 
