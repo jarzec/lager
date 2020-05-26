@@ -43,6 +43,12 @@ struct visitor : Ts...
     using Ts::operator()...;
 };
 
+template <>
+struct visitor<>
+{
+    void operator()() {}
+};
+
 //! @} group: util
 
 template <class... Ts>
