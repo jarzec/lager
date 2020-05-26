@@ -12,6 +12,8 @@
 
 #pragma once
 
+#include <immer/box.hpp>
+
 #include <boost/hana/at_key.hpp>
 #include <boost/hana/filter.hpp>
 #include <boost/hana/find.hpp>
@@ -29,6 +31,79 @@
 #include <utility>
 
 namespace lager {
+
+#if (_MSC_VER)
+   /*!
+    * Dependency passing type.
+    * With MSVC it can only be used with a single template argument.
+    */
+    template <typename... OtherDeps>
+    class deps {};
+
+template <>
+class deps<>
+{
+public:
+    template <typename... Ds>
+    auto merge(deps<Ds...> other)
+    {
+        return other;
+    }
+};
+
+template <typename T>
+class deps<T>
+{
+public:
+    template <typename T>
+    static deps with(T&& value)
+    {
+        return deps<T>(std::move(value));
+    }
+
+    deps() = default;
+    deps(const deps&) = default;
+    deps(deps&&) = default;
+    deps& operator=(const deps&) = default;
+    deps& operator=(deps&&) = default;
+
+    /*!
+     * Get the dependency with key `Key`.
+     * This is a template method for consistency with the original deps
+     */
+    template <typename Key, typename std::enable_if_t<std::is_same<T, Key>::value, int> = 0>
+    Key get() const
+    {
+        return value_;
+    }
+
+    /*!
+     * This verion of deps has only one type of value.
+     */
+    template <typename Key>
+    bool has() const
+    {
+        return std::is_same<Key, T>::value;
+    }
+
+    /*!
+     * Here merging ignores the other deps.
+     * This is aimed at merging with empty lager::deps<>.
+     */
+    template <typename... Ds>
+    auto merge(deps<Ds...> other)
+    {
+        return deps<T>{*this};
+    }
+
+private:
+    deps(T&& value) : value_{value} {}
+
+    // Use immer::box to avoid unnecessary copies
+    immer::box<T> value_;
+};
+
+#else
 
 struct missing_dependency_error : std::runtime_error
 {
@@ -144,7 +219,7 @@ using to_spec = typename std::conditional_t<
     is_spec_v<T>,
     T,
     std::conditional_t<std::is_reference_v<T> ||
-                           detail::is_reference_wrapper_v<T>,
+                           lager::detail::is_reference_wrapper_v<T>,
                        ref<std::remove_reference_t<T>>,
                        val<T>>>::type;
 
@@ -453,6 +528,8 @@ private:
 
     storage_t storage_;
 };
+
+#endif
 
 /*!
  * Returns a deps object containing everything passed in `args`.  Dependencies
