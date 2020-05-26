@@ -69,7 +69,7 @@ using as_actions_t = typename as_actions<ActionOrActions>::type;
 namespace detail {
 
 template <typename Action, typename Candidates>
-auto find_convertible_action_aux(Action act, Candidates candidates)
+auto find_convertible_action_aux(Action, Candidates candidates)
 {
     auto is_convertible = [](auto t) {
         return std::is_convertible<typename Action::type,
@@ -85,9 +85,9 @@ using find_convertible_action_t = typename decltype(find_convertible_action_aux(
 template <typename... A1, typename... A2, typename Converter>
 auto are_compatible_actions_aux(actions<A1...>, actions<A2...>, Converter c)
 {
-    return boost::hana::all_of(boost::hana::tuple_t<A1...>, [](auto t1) {
+    return boost::hana::all_of(boost::hana::tuple_t<A1...>, [&c](auto t1) {
         return boost::hana::is_just(
-            boost::hana::find_if(boost::hana::tuple_t<A2...>, [](auto t2) {
+            boost::hana::find_if(boost::hana::tuple_t<A2...>, [&c](auto t2) {
                 return std::is_convertible<
                     decltype(c(std::declval<typename decltype(t1)::type>())),
                     typename decltype(t2)::type>{};
@@ -148,23 +148,33 @@ using merge_actions_t = typename decltype(merge_actions_aux(
 template <typename... Actions>
 struct dispatcher;
 
+template<typename T>
+void ignore_template_arg() {}
+
 template <typename... Actions>
-struct dispatcher<actions<Actions...>> : std::function<void(Actions)>...
+using overloadset = lager::visitor<std::function<void(Actions)>...>;
+
+template <typename... Actions>
+struct dispatcher;
+
+template <typename... Actions>
+struct dispatcher<actions<Actions...>> : overloadset<Actions...>
 {
-    using std::function<void(Actions)>::operator()...;
+    using overloadset<Actions...>::operator();
 
     dispatcher() = default;
 
     template <typename... As>
     dispatcher(dispatcher<actions<As...>> other)
-        : std::function<void(Actions)>{static_cast<
+        : overloadset<Actions...>{ static_cast<
               std::function<void(find_convertible_action_t<Actions, As...>)>&>(
-              other)}...
+              other)... }
     {}
 
     template <typename Fn>
     dispatcher(Fn other)
-        : std::function<void(Actions)>{other}...
+        : overloadset<Actions...>{
+              (ignore_template_arg<Actions>(), other)... }
     {}
 
     template <typename Action, typename... As, typename Converter>
@@ -179,14 +189,15 @@ struct dispatcher<actions<Actions...>> : std::function<void(Actions)>...
 
     template <typename... As, typename Converter>
     dispatcher(dispatcher<actions<As...>> other, Converter conv)
-        : std::function<void(Actions)>{
-              dispatcher_fn_aux<Actions>(other, conv)}...
+        : overloadset<Actions...>{
+              dispatcher_fn_aux<Actions>(other, conv)...}
     {}
 
     template <typename Fn, typename Converter>
     dispatcher(Fn other, Converter conv)
-        : std::function<void(Actions)>{
-              [other, conv](auto&& act) { other(conv(LAGER_FWD(act))); }}...
+        : overloadset<Actions...>{(
+              ignore_template_arg<Actions>(),
+              [other, conv](auto&& act) { other(conv(LAGER_FWD(act))); })...} 
     {}
 };
 
@@ -469,7 +480,7 @@ bool is_empty_effect(const std::function<void(Ctx)>& v)
 }
 
 template <typename Eff>
-bool is_empty_effect(const Eff& v)
+bool is_empty_effect(const Eff&)
 {
     return false;
 }
