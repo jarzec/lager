@@ -26,9 +26,6 @@ namespace lager {
 
 namespace detail {
 
-template <typename T>
-using reader_root_node = root_node<T, reader_node>;
-
 template <typename Action, typename Model>
 struct store_node_base : public reader_root_node<Model>
 {

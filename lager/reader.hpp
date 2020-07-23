@@ -115,4 +115,9 @@ public:
 
 //! @}
 
+namespace detail {
+    template <typename T>
+    using reader_root_node = root_node<T, reader_node>;
+}
+
 } // namespace lager

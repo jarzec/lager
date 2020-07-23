@@ -115,13 +115,16 @@ ZUG_INLINE_CONSTEXPR struct send_up_rf_t
     }
 } send_up_rf{};
 
+template <typename Xform, typename Parents>
+using xform_cursor_base = xform_reader_node<Xform, Parents, cursor_node>;
+
 /*!
  * Implementation of a node with a transducer
  */
 template <typename Xform, typename WXform, typename Parents>
-class xform_cursor_node : public xform_reader_node<Xform, Parents, cursor_node>
+class xform_cursor_node : public xform_cursor_base<Xform, Parents>
 {
-    using base_t  = xform_reader_node<Xform, Parents, cursor_node>;
+    using base_t  = xform_cursor_base<Xform, Parents>;
     using up_rf_t = decltype(std::declval<WXform>()(send_up_rf));
 
     up_rf_t up_step_;
